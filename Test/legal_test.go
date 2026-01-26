@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/skreimeyer/legal/pkg/legal"
+	"github.com/samuel-kreimeyer/Legal/pkg/legal"
 )
 
 func cmpslice(a, b []string) bool {
@@ -56,11 +56,11 @@ func TestBearing(t *testing.T) {
 	sample := "N10d15m30sW"
 	want, err := legal.NewBearing(legal.North, legal.West, 10, 15, 30.0)
 	if err != nil {
-		t.Errorf("NewBearing returned an error %w", err)
+		t.Errorf("NewBearing returned an error %v", err)
 	}
 	err = result.FromString(sample)
 	if err != nil {
-		t.Errorf("FromString method returned an error %w", err)
+		t.Errorf("FromString method returned an error %v", err)
 	}
 	if want != result {
 		t.Errorf("FromSubs:\nexpected:%v\n\nresult:%v", want, result)
@@ -69,11 +69,11 @@ func TestBearing(t *testing.T) {
 	complex := `South 87°30'54" East`
 	want, err = legal.NewBearing(legal.South, legal.East, 87, 30, 54.0)
 	if err != nil {
-		t.Errorf("NewBearing returned an error %w", err)
+		t.Errorf("NewBearing returned an error %v", err)
 	}
 	err = morecomplex.FromString(complex)
 	if err != nil || morecomplex != want {
-		t.Errorf("Bearing from string for %s failed with error %w and result %v", complex, err, morecomplex)
+		t.Errorf("Bearing from string for %s failed with error %v and result %v", complex, err, morecomplex)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestLinearFromString(t *testing.T) {
 	var result legal.LinearMete
 	err := result.FromString(`THENCE (6) North 30°1'1" East, 25.00 feet`)
 	if err != nil || want != result {
-		t.Errorf("Linear Mete from string failed for case %v and result %v and error %w", want, result, err)
+		t.Errorf("Linear Mete from string failed for case %v and result %v and error %v", want, result, err)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestBearingRoundTrip(t *testing.T) {
 	var b1, b2 legal.Bearing
 	err := b1.FromString(`South 87°30'54" East, 5.00 feet`)
 	if err != nil {
-		t.Errorf("TestBearingRoundTrip parse string failed with %w", err)
+		t.Errorf("TestBearingRoundTrip parse string failed with %v", err)
 	}
 	angle := b1.ToAngle()
 	b2.FromAngle(angle)
@@ -151,7 +151,7 @@ func TestDescription(t *testing.T) {
 	result, err := d.Describe()
 	want := "ALWAYS FAIL"
 	if err != nil || result != want {
-		t.Errorf("Describe failed with error: %w\n content:\n%s", err, result)
+		t.Errorf("Describe failed with error: %v\n content:\n%s", err, result)
 	}
 
 }

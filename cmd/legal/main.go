@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/skreimeyer/legal/pkg/legal"
+	"github.com/samuel-kreimeyer/Legal/pkg/legal"
 )
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 		return
 	}
 	filename := flag.Args()[0]
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -62,13 +62,13 @@ func main() {
 			continue
 		}
 		if l[0] == 'T' {
-			mete := Mete{}
-			err = mete.Parse(l)
+			var mete legal.LinearMete
+			err = mete.FromString(l)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
-			metes = append(metes, mete)
+			metes = append(metes, &mete)
 		}
 		if l[0] == 'C' {
 			values := distdir.FindStringSubmatch(l)
@@ -84,7 +84,12 @@ func main() {
 		}
 	}
 	hasCommencement := *cdir != "" || *cdist != 0.0
-	desc := Description{
+	startDir, ok := legal.DirectionFromString(*origin)
+	if !ok {
+		fmt.Println("Invalid origin direction:", *origin)
+		return
+	}
+	desc := legal.Description{
 		Kind:         strings.ToUpper(*kind),
 		Lot:          strings.ToUpper(*lot),
 		Block:        strings.ToUpper(*block),
@@ -92,7 +97,7 @@ func main() {
 		City:         "NORTH LITTLE ROCK",
 		County:       "PULASKI",
 		State:        "ARKANSAS",
-		Start:        strings.ToUpper(*origin),
+		Start:        startDir,
 		Commencement: hasCommencement,
 		Area:         area,
 		Unit:         strings.ToUpper(units),
