@@ -1,113 +1,128 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/legal"
+	"github.com/samuel-kreimeyer/Legal/pkg/app"
+	"github.com/samuel-kreimeyer/Legal/pkg/parse"
+	renderlegal "github.com/samuel-kreimeyer/Legal/pkg/render/legal"
 )
 
 func main() {
-	// init flags
 	usage := `legal
-	
-	Reads a 'metes and bounds report' from AutoCAD and prints a well-formatted legal description. Most command line flags are not optional or will not produce sensible results.
-	
+
+	Reads parcel geometry from DXF, IFC, or LandXML and prints legal description text.
+
 	basic usage:
-	legal -kind="Drainage Easement" -cdir=N1d2m3sE -cdist=10.0 -lot=1 -block=1 -origin=southeast -sub="Super Great Addition" REPORTFILE.txt`
-	kind := flag.String("kind", "", "Type of entity described, such as 'Temporary Construction Easement'")
-	cdir := flag.String("cdir", "",
-		"Bearing from point of commencement to point of beginning. Must follow the format N12d34m56sE {dir}{degree}d{minute}m{second}s{dir}")
-	cdist := flag.Float64("cdist", 0.0, "Distance along 'cdir' bearing from point of commencement to point of beginning")
+	legal -format=auto -kind="Utility Easement" -lot=7 -block=B -sub="Sample Addition" INPUTFILE`
+
+	format := flag.String("format", "auto", "Input format: auto|dxf|ifc|landxml")
+	kind := flag.String("kind", "", "Type of entity described, such as 'Utility Easement'")
 	lot := flag.String("lot", "", "Lot number (or letter)")
 	block := flag.String("block", "", "Block number (or letter)")
-	origin := flag.String("origin", "", "Cardinal direction of point of beginning or commencement of the lot being described (ie, northwest, east)")
+	start := flag.String("start", "northeast", "Starting corner label for description (for example: northeast)")
 	sub := flag.String("sub", "", "Subdivision name")
+	city := flag.String("city", "North Little Rock", "City name")
+	county := flag.String("county", "Pulaski", "County name")
+	state := flag.String("state", "Arkansas", "State name")
+	commencing := flag.Bool("commencing", false, "Use 'COMMENCING' preamble instead of 'BEGINNING'")
+	area := flag.Float64("area", 0.0, "Override area value in square feet (0 uses parser-derived area when available)")
+	areaUnit := flag.String("area-unit", "square feet", "Area display units text")
+	parcel := flag.Int("parcel", 1, "1-based parcel index when input contains multiple parcels")
+	allParcels := flag.Bool("all", false, "Render all parsed parcels")
+
 	flag.Parse()
+
 	if len(flag.Args()) < 1 {
 		fmt.Println(usage)
 		fmt.Println("Arguments:")
 		flag.PrintDefaults()
 		return
 	}
-	filename := flag.Args()[0]
-	data, err := os.ReadFile(filename)
+
+	inputPath := flag.Args()[0]
+	sourceFormat, err := parseFormatFlag(*format)
 	if err != nil {
-		fmt.Println(err)
-		return
+		failf("%v\n", err)
 	}
-	report := string(data)
-	var metes []legal.Mete
-	if *cdir != "" {
-		var commBearing legal.Bearing
-		err = commBearing.FromString(*cdir)
+
+	pipeline := app.NewPipeline()
+	parcels, err := pipeline.ParseFile(context.Background(), inputPath, sourceFormat)
+	if err != nil {
+		failf("parse failed: %v\n", err)
+	}
+	if len(parcels) == 0 {
+		failf("no parcels parsed from input\n")
+	}
+
+	indices, err := selectedParcelIndices(len(parcels), *parcel, *allParcels)
+	if err != nil {
+		failf("%v\n", err)
+	}
+
+	renderOpts := renderlegal.Options{
+		Kind:            *kind,
+		Lot:             *lot,
+		Block:           *block,
+		Subdivision:     *sub,
+		City:            *city,
+		County:          *county,
+		State:           *state,
+		StartCorner:     *start,
+		UseCommencing:   *commencing,
+		AreaSquareFeet:  *area,
+		AreaDisplayUnit: *areaUnit,
+	}
+
+	for i, idx := range indices {
+		out, err := renderlegal.RenderParcel(parcels[idx], renderOpts)
 		if err != nil {
-			fmt.Println("Invalid commencement bearing")
-			return
+			failf("render failed for parcel %d (%s): %v\n", idx+1, parcels[idx].ID, err)
 		}
-		angle := commBearing.ToAngle()
-		commDist := *cdist
-		comm := legal.NewLinearMete(angle, commDist, "FEET")
-		metes = append(metes, &comm) // FIXME: allow other units
-	}
-	var area float64
-	var units string
-	distdir := regexp.MustCompile(`(\d+\.?\d*)\s?([A-Za-z ]+)`)
-	for i, l := range strings.Split(report, "\n") {
-		if i == 0 || len(l) < 1 {
-			continue
+		if len(indices) > 1 {
+			fmt.Printf("PARCEL %d (%s)\n\n", idx+1, parcels[idx].ID)
 		}
-		if l[0] == 'T' {
-			var mete legal.LinearMete
-			err = mete.FromString(l)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			metes = append(metes, &mete)
-		}
-		if l[0] == 'C' {
-			values := distdir.FindStringSubmatch(l)
-			if len(values) != 3 {
-				fmt.Println("Invalid area description. Area matches:", values)
-				return
-			}
-			area, err = strconv.ParseFloat(values[1], 64)
-			if err != nil {
-				fmt.Println("Invalid area description", err)
-			}
-			units = values[2]
+		fmt.Println(out)
+		if i < len(indices)-1 {
+			fmt.Println()
 		}
 	}
-	hasCommencement := *cdir != "" || *cdist != 0.0
-	startDir, ok := legal.DirectionFromString(*origin)
-	if !ok {
-		fmt.Println("Invalid origin direction:", *origin)
-		return
+}
+
+func parseFormatFlag(v string) (parse.SourceFormat, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "auto":
+		return parse.SourceFormatUnknown, nil
+	case "dxf":
+		return parse.SourceFormatDXF, nil
+	case "ifc":
+		return parse.SourceFormatIFC, nil
+	case "landxml", "xml":
+		return parse.SourceFormatLandXML, nil
+	default:
+		return parse.SourceFormatUnknown, fmt.Errorf("invalid -format value %q (expected auto|dxf|ifc|landxml)", v)
 	}
-	desc := legal.Description{
-		Kind:         strings.ToUpper(*kind),
-		Lot:          strings.ToUpper(*lot),
-		Block:        strings.ToUpper(*block),
-		Subdivision:  strings.ToUpper(*sub),
-		City:         "NORTH LITTLE ROCK",
-		County:       "PULASKI",
-		State:        "ARKANSAS",
-		Start:        startDir,
-		Commencement: hasCommencement,
-		Area:         area,
-		Unit:         strings.ToUpper(units),
-		Metes:        metes,
+}
+
+func selectedParcelIndices(total, singleIndex int, all bool) ([]int, error) {
+	if all {
+		indices := make([]int, 0, total)
+		for i := 0; i < total; i++ {
+			indices = append(indices, i)
+		}
+		return indices, nil
 	}
-	legal, err := desc.Describe()
-	if err != nil {
-		fmt.Println("Failed to generate description:%w", err)
-		return
+	if singleIndex < 1 || singleIndex > total {
+		return nil, fmt.Errorf("invalid -parcel value %d (must be 1..%d)", singleIndex, total)
 	}
-	fmt.Println(legal)
-	return
+	return []int{singleIndex - 1}, nil
+}
+
+func failf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
+	os.Exit(1)
 }

@@ -1,0 +1,9 @@
+{
+  "name": "legal-description",
+  "status": "research",
+  "category": "civil-engineering",
+  "type": "experiment",
+  "active": false,
+  "description": "Tool for working with legal property descriptions",
+  "tech": ["Go"]
+}

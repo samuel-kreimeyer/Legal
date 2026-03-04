@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.landxml.org/schema/LandXML-1.2 http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd" version="1.2" language="English">
+  <Units>
+    <Imperial areaUnit="squareFoot" linearUnit="USSurveyFoot" />
+  </Units>
+  <Parcels name="Fixture Parcels">
+    <Parcel name="SQ-1" area="5000.0" desc="">
+      <CoordGeom>
+        <Line>
+          <Start>0 0</Start>
+          <End>100 0</End>
+        </Line>
+        <Line>
+          <Start>100 0</Start>
+          <End>100 50</End>
+        </Line>
+        <Line>
+          <Start>100 50</Start>
+          <End>0 50</End>
+        </Line>
+        <Line>
+          <Start>0 50</Start>
+          <End>0 0</End>
+        </Line>
+      </CoordGeom>
+    </Parcel>
+  </Parcels>
+</LandXML>

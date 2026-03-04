@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "repository": {
+    "path": "/home/sam/Projects/legal-description",
+    "name": "legal-description"
+  },
+  "last_check": {
+    "timestamp": "2026-01-10T16:22:45.198912",
+    "commit_hash": "06f0358ad0949080effb46ed125ab71ece72fe15",
+    "branch": "master",
+    "exit_code": 1,
+    "issues_found": 4,
+    "checks_run": [
+      "schema",
+      "types",
+      "lint",
+      "risk",
+      "docs"
+    ]
+  },
+  "history": [],
+  "metadata": {
+    "created": "2026-01-10T16:22:45.198906",
+    "last_modified": "2026-01-10T16:22:45.198918"
+  }
+}
