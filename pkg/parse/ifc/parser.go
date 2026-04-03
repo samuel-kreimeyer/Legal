@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/geom"
-	"github.com/samuel-kreimeyer/Legal/pkg/model"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/geom"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/model"
 )
 
 type Parser struct{}

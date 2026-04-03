@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/parse"
-	renderlegal "github.com/samuel-kreimeyer/Legal/pkg/render/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/parse"
+	renderlegal "github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/render/legal"
 )
 
 func TestPipeline_ParseNormalizeRender_DXFFixture(t *testing.T) {

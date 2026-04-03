@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/model"
-	"github.com/samuel-kreimeyer/Legal/pkg/parse"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/model"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/parse"
 )
 
 func TestPipeline_NormalizesClockwiseAcrossFormats(t *testing.T) {

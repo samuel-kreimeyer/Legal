@@ -30,5 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface for processing legal descriptions
 - Test suite for core functionality
 
-[Unreleased]: https://github.com/samuel-kreimeyer/Legal/compare/06f0358...HEAD
-[0.1.0]: https://github.com/samuel-kreimeyer/Legal/releases/tag/v0.1.0
+[Unreleased]: https://github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/compare/06f0358...HEAD
+[0.1.0]: https://github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/releases/tag/v0.1.0

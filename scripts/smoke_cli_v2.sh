@@ -2,9 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MONOREPO_ROOT="$(cd "${PACKAGE_ROOT}/../.." && pwd)"
+CLI_APP_ROOT="${MONOREPO_ROOT}/apps/legal-description-cli"
 
-cd "${REPO_ROOT}"
+cd "${PACKAGE_ROOT}"
 
 export GOCACHE="${GOCACHE:-/tmp/go-build}"
 mkdir -p "${GOCACHE}"
@@ -28,7 +30,10 @@ run_case() {
   local input="$2"
   local output_file="$3"
 
-  go run ./cmd/legal -format "${format}" "${common_args[@]}" "${input}" > "${output_file}"
+  (
+    cd "${CLI_APP_ROOT}"
+    go run ./cmd/legal -format "${format}" "${common_args[@]}" "${PACKAGE_ROOT}/${input}"
+  ) > "${output_file}"
   diff -u "${GOLDEN}" "${output_file}"
 }
 
@@ -36,7 +41,10 @@ echo "==> Running v2 package tests"
 go test ./pkg/... >/dev/null
 
 echo "==> Running v2 command build check"
-go test ./cmd/... >/dev/null
+(
+  cd "${CLI_APP_ROOT}"
+  go test ./cmd/... >/dev/null
+)
 
 echo "==> Verifying CLI output for LandXML"
 run_case "landxml" "tests/fixtures/landxml/square.xml" "${TMP_DIR}/landxml.txt"

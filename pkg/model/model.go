@@ -3,7 +3,7 @@ package model
 import (
 	"math"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/geom"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/geom"
 )
 
 type LinearUnit string
@@ -35,8 +35,23 @@ type Parcel struct {
 	Loop           BoundaryLoop
 }
 
+// Monument is a physical or computed survey marker at a boundary vertex.
+// The Description field holds a phrase suitable for use in a legal description
+// after "being" (e.g., "a found iron pin").
+type Monument struct {
+	PointNumber int
+	FeatureCode string
+	Description string
+}
+
 type BoundaryLoop struct {
 	Segments []Segment
+
+	// Monuments optionally annotates each vertex with a survey monument.
+	// When non-nil its length must equal len(Segments); Monuments[i] is the
+	// monument at Segments[i].Start(). A nil element means no monument was
+	// found for that vertex.
+	Monuments []*Monument
 }
 
 type Segment interface {

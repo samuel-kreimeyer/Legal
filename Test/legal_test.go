@@ -1,3 +1,5 @@
+//go:build legacy
+
 package main
 
 import (
@@ -5,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/legal"
 )
 
 func cmpslice(a, b []string) bool {

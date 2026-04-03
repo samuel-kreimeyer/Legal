@@ -9,4 +9,4 @@ test-api:
 	GOCACHE=$${GOCACHE:-/tmp/go-build} go test ./pkg/api/...
 
 serve-api:
-	go run ./cmd/legal-api -addr :8080
+	cd ../../apps/legal-description-api && go run ./cmd/legal-api -addr :8080

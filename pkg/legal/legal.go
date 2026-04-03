@@ -1,4 +1,4 @@
-//Package legal is a  for creating legal descriptions using metes and bounds
+// Package legal is a  for creating legal descriptions using metes and bounds
 package legal
 
 // TODO:
@@ -14,10 +14,10 @@ import (
 	"text/template"
 )
 
-//Direction is an enumeration of cardinal directions
+// Direction is an enumeration of cardinal directions
 type Direction int
 
-//Cardinal directions proceeding north counterclockwise
+// Cardinal directions proceeding north counterclockwise
 const (
 	North Direction = iota
 	NorthEast
@@ -85,7 +85,7 @@ func DirectionFromAngle(angle float64) Direction {
 	}
 }
 
-//Describe returns the string representation of a direction
+// Describe returns the string representation of a direction
 func (d Direction) Describe() string {
 	dirNames := [8]string{"NORTH", "NORTHEAST", "EAST", "SOUTHEAST", "SOUTH", "SOUTHWEST", "WEST", "NORTHWEST"}
 	return dirNames[d]
@@ -229,7 +229,7 @@ func NewLinearMete(angle, distance float64, unit string) LinearMete {
 	}
 }
 
-//Tangent is the angle of the bearing
+// Tangent is the angle of the bearing
 func (m *LinearMete) Tangent() float64 {
 	return m.bearing
 }
@@ -286,10 +286,10 @@ func (m *LinearMete) FromString(line string) error {
 	return nil
 }
 
-//Rotation is a direction of travel along an arc
+// Rotation is a direction of travel along an arc
 type Rotation int
 
-//Rotation is given a positive or negative value to allow simple derivation of tangent angles
+// Rotation is given a positive or negative value to allow simple derivation of tangent angles
 const (
 	Clockwise        Rotation = 1
 	CounterClockwise Rotation = -1

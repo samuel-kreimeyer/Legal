@@ -5,8 +5,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/geom"
-	"github.com/samuel-kreimeyer/Legal/pkg/model"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/geom"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/model"
 )
 
 type Options struct {
@@ -90,16 +90,25 @@ func RenderParcel(parcel model.Parcel, opts Options) (string, error) {
 		b.WriteString(" ")
 		b.WriteString(lot)
 	}
+	if mon := monumentAt(parcel.Loop, 0); mon != nil {
+		b.WriteString(", BEING ")
+		b.WriteString(strings.ToUpper(mon.Description))
+	}
 	b.WriteString(";\n")
 
 	prevTan := parcel.Loop.Segments[0].TangentAtStart()
 	for i, seg := range parcel.Loop.Segments {
 		if i > 0 {
 			if geom.NearlyEqualAngle(prevTan, seg.TangentAtStart()) {
-				b.WriteString("TO A POINT OF TANGENCY;\n")
+				b.WriteString("TO A POINT OF TANGENCY")
 			} else {
-				b.WriteString("TO A POINT OF NON-TANGENCY;\n")
+				b.WriteString("TO A POINT OF NON-TANGENCY")
 			}
+			if mon := monumentAt(parcel.Loop, i); mon != nil {
+				b.WriteString(", BEING ")
+				b.WriteString(strings.ToUpper(mon.Description))
+			}
+			b.WriteString(";\n")
 		}
 
 		line, err := renderSegment(seg)
@@ -207,4 +216,12 @@ func degreesToDMS(degrees float64) string {
 
 func normalizeText(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// monumentAt returns the Monument for vertex i in loop, or nil if none exists.
+func monumentAt(loop model.BoundaryLoop, i int) *model.Monument {
+	if i < len(loop.Monuments) {
+		return loop.Monuments[i]
+	}
+	return nil
 }

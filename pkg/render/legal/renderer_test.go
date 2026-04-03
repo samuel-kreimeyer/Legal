@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/geom"
-	"github.com/samuel-kreimeyer/Legal/pkg/model"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/geom"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/model"
 )
 
 func TestRenderParcel_UsesTangencyFromPreviousSegment(t *testing.T) {

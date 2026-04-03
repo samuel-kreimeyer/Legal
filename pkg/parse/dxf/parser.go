@@ -10,14 +10,33 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/geom"
-	"github.com/samuel-kreimeyer/Legal/pkg/model"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/geom"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/model"
 )
 
-type Parser struct{}
+// Options configures the DXF parser.
+type Options struct {
+	// LayerFilter restricts parsing to entities on the named layers.
+	// Names are compared case-insensitively. An empty slice means all layers.
+	//
+	// When two or more layer names are provided the parser operates in
+	// multi-layer assembly mode: segments from all named layers are pooled
+	// together before loop-building, so a closed boundary can be formed from
+	// linework that spans two layers (e.g. a property-line layer that supplies
+	// three sides and a ROW layer that supplies the fourth).
+	LayerFilter []string
+}
+
+type Parser struct {
+	opts Options
+}
 
 func NewParser() *Parser {
 	return &Parser{}
+}
+
+func NewParserWithOptions(opts Options) *Parser {
+	return &Parser{opts: opts}
 }
 
 func (p *Parser) Parse(ctx context.Context, r io.Reader) ([]model.Parcel, error) {
@@ -46,7 +65,8 @@ func (p *Parser) Parse(ctx context.Context, r io.Reader) ([]model.Parcel, error)
 		return nil, fmt.Errorf("DXF file missing ENTITIES section")
 	}
 
-	directLoops, chainables, err := parseEntities(entities, unitFactor)
+	filter := buildFilterSet(p.opts.LayerFilter)
+	directLoops, chainables, err := parseEntities(entities, unitFactor, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +74,16 @@ func (p *Parser) Parse(ctx context.Context, r io.Reader) ([]model.Parcel, error)
 		return nil, fmt.Errorf("no supported closed geometry found in DXF")
 	}
 
+	// Multi-layer assembly: dissolve all direct loops into their constituent
+	// segments and merge with the open chainables, then build closed loops from
+	// the combined pool. Independent boundaries on each layer will still form
+	// separate loops; segments from different layers that share endpoints will
+	// be chained together into a single closed boundary.
+	if len(p.opts.LayerFilter) > 1 {
+		return buildMergedParcels(directLoops, chainables, p.opts.LayerFilter)
+	}
+
+	// Single-layer or unfiltered mode: keep existing per-layer behaviour.
 	parcels := make([]model.Parcel, 0, len(directLoops)+1)
 	layerCounts := map[string]int{}
 
@@ -97,6 +127,165 @@ func (p *Parser) Parse(ctx context.Context, r io.Reader) ([]model.Parcel, error)
 	}
 
 	return parcels, nil
+}
+
+// buildFilterSet converts a slice of layer names into a normalised lookup set.
+// An empty slice returns a nil map, which callers treat as "accept all".
+func buildFilterSet(layers []string) map[string]bool {
+	if len(layers) == 0 {
+		return nil
+	}
+	m := make(map[string]bool, len(layers))
+	for _, l := range layers {
+		m[normalizedLayer(l)] = true
+	}
+	return m
+}
+
+// layerAllowed reports whether layer passes the filter. A nil filter accepts all.
+func layerAllowed(filter map[string]bool, layer string) bool {
+	if filter == nil {
+		return true
+	}
+	return filter[normalizedLayer(layer)]
+}
+
+// buildMergedParcels pools segments from all provided direct loops and open
+// chainables, splits them at cross-layer intersection points, and builds closed
+// loops from the combined set.
+//
+// The layers slice controls seed ordering: segments from the last-listed layer
+// appear first so the greedy loop-builder finds the acquisition area (which
+// uses those segments) before attempting to reconstruct the residual property
+// boundary, which is intentionally incomplete after splitting.
+//
+// Independent closed boundaries on different layers remain as separate parcels.
+func buildMergedParcels(directLoops []loopWithLayer, chainables []layerSegment, layers []string) ([]model.Parcel, error) {
+	// Group segments by layer.
+	byLayer := make(map[string][]model.Segment, len(layers))
+	for _, lw := range directLoops {
+		layer := normalizedLayer(lw.layer)
+		byLayer[layer] = append(byLayer[layer], lw.loop.Segments...)
+	}
+	for _, ls := range chainables {
+		layer := normalizedLayer(ls.layer)
+		byLayer[layer] = append(byLayer[layer], ls.segment)
+	}
+
+	// Normalise layer keys to match the filter list.
+	normLayers := make([]string, len(layers))
+	for i, l := range layers {
+		normLayers[i] = normalizedLayer(l)
+	}
+
+	// Only include layers that actually have geometry.
+	activeLayers := normLayers[:0:len(normLayers)]
+	seen := map[string]bool{}
+	for _, l := range normLayers {
+		if _, ok := byLayer[l]; ok && !seen[l] {
+			activeLayers = append(activeLayers, l)
+			seen[l] = true
+		}
+	}
+
+	all := splitAtCrossLayerIntersections(byLayer, activeLayers)
+	if len(all) == 0 {
+		return nil, fmt.Errorf("multi-layer assembly produced no segments")
+	}
+
+	loops := buildClosedLoopsBestEffort(all)
+	if len(loops) == 0 {
+		return nil, fmt.Errorf("multi-layer assembly: no closed loops could be formed from the combined geometry")
+	}
+
+	parcels := make([]model.Parcel, len(loops))
+	for i, loop := range loops {
+		parcels[i] = model.Parcel{
+			ID:     fmt.Sprintf("DXF-COMBINED-%d", i+1),
+			Source: model.SourceDXF,
+			Unit:   model.LinearUnitFoot,
+			Loop:   loop,
+		}
+	}
+	return parcels, nil
+}
+
+// buildClosedLoopsBestEffort is like buildClosedLoops but silently discards any
+// chain of segments that cannot be closed rather than returning an error. This
+// is correct behaviour for multi-layer assembly where the combined pool may
+// contain residual property-boundary segments that are intentionally incomplete
+// after intersection splitting (the shared ROW edge was already consumed by the
+// acquisition-area loop).
+func buildClosedLoopsBestEffort(segments []model.Segment) []model.BoundaryLoop {
+	used := make([]bool, len(segments))
+	var loops []model.BoundaryLoop
+
+	for {
+		seed := -1
+		for i := range segments {
+			if !used[i] {
+				seed = i
+				break
+			}
+		}
+		if seed == -1 {
+			break
+		}
+
+		used[seed] = true
+		chain := []model.Segment{segments[seed]}
+		start := chain[0].Start()
+		cursor := chain[0].End()
+		closed := false
+
+		for range segments {
+			if len(chain) >= 3 && pointsNear(cursor, start) {
+				closed = true
+				break
+			}
+
+			found := -1
+			reversed := false
+			for j := range segments {
+				if used[j] {
+					continue
+				}
+				if pointsNear(cursor, segments[j].Start()) {
+					found = j
+					break
+				}
+				if pointsNear(cursor, segments[j].End()) {
+					found = j
+					reversed = true
+					break
+				}
+			}
+			if found == -1 {
+				break
+			}
+
+			next := segments[found]
+			if reversed {
+				rev, err := reverseSegment(next)
+				if err != nil {
+					break
+				}
+				next = rev
+			}
+			used[found] = true
+			chain = append(chain, next)
+			cursor = next.End()
+		}
+
+		if closed {
+			loops = append(loops, model.BoundaryLoop{Segments: chain})
+		}
+		// Segments consumed by a failed chain are marked used and discarded —
+		// they are the residual property boundary that can't close without the
+		// shared acquisition edge.
+	}
+
+	return loops
 }
 
 type groupPair struct {
@@ -209,7 +398,7 @@ func insUnitsToFeet(ins int) float64 {
 	}
 }
 
-func parseEntities(pairs []groupPair, factor float64) ([]loopWithLayer, []layerSegment, error) {
+func parseEntities(pairs []groupPair, factor float64, filter map[string]bool) ([]loopWithLayer, []layerSegment, error) {
 	directLoops := make([]loopWithLayer, 0, 4)
 	chainables := make([]layerSegment, 0, 32)
 
@@ -236,8 +425,16 @@ func parseEntities(pairs []groupPair, factor float64) ([]loopWithLayer, []layerS
 			if err != nil {
 				return nil, nil, err
 			}
-			directLoops = append(directLoops, loops...)
-			chainables = append(chainables, segs...)
+			for _, lw := range loops {
+				if layerAllowed(filter, lw.layer) {
+					directLoops = append(directLoops, lw)
+				}
+			}
+			for _, ls := range segs {
+				if layerAllowed(filter, ls.layer) {
+					chainables = append(chainables, ls)
+				}
+			}
 			i = j + 1
 			continue
 		}
@@ -254,20 +451,32 @@ func parseEntities(pairs []groupPair, factor float64) ([]loopWithLayer, []layerS
 			if err != nil {
 				return nil, nil, err
 			}
-			chainables = append(chainables, layerSegment{layer: layer, segment: seg})
+			if layerAllowed(filter, layer) {
+				chainables = append(chainables, layerSegment{layer: layer, segment: seg})
+			}
 		case "ARC":
 			layer, seg, err := parseArcEntity(data, factor)
 			if err != nil {
 				return nil, nil, err
 			}
-			chainables = append(chainables, layerSegment{layer: layer, segment: seg})
+			if layerAllowed(filter, layer) {
+				chainables = append(chainables, layerSegment{layer: layer, segment: seg})
+			}
 		case "LWPOLYLINE":
 			loops, segs, err := parseLWPolylineEntity(data, factor)
 			if err != nil {
 				return nil, nil, err
 			}
-			directLoops = append(directLoops, loops...)
-			chainables = append(chainables, segs...)
+			for _, lw := range loops {
+				if layerAllowed(filter, lw.layer) {
+					directLoops = append(directLoops, lw)
+				}
+			}
+			for _, ls := range segs {
+				if layerAllowed(filter, ls.layer) {
+					chainables = append(chainables, ls)
+				}
+			}
 		}
 		i = j
 	}

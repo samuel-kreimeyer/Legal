@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/api"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/api"
 )
 
 func main() {

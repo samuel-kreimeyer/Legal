@@ -7,9 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/app"
-	"github.com/samuel-kreimeyer/Legal/pkg/parse"
-	renderlegal "github.com/samuel-kreimeyer/Legal/pkg/render/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/app"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/parse"
+	renderlegal "github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/render/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/survey"
 )
 
 func main() {
@@ -34,6 +35,10 @@ func main() {
 	areaUnit := flag.String("area-unit", "square feet", "Area display units text")
 	parcel := flag.Int("parcel", 1, "1-based parcel index when input contains multiple parcels")
 	allParcels := flag.Bool("all", false, "Render all parsed parcels")
+	surveyFile := flag.String("survey-file", "", "Survey point file (CSV or space-delimited) for monument annotations")
+	surveyTolerance := flag.Float64("survey-tolerance", 0.5, "Maximum distance in feet to match survey points to parcel vertices")
+	var layers stringSlice
+	flag.Var(&layers, "layer", "DXF layer name to include (repeat for multiple layers; two or more triggers multi-layer assembly)")
 
 	flag.Parse()
 
@@ -51,12 +56,26 @@ func main() {
 	}
 
 	pipeline := app.NewPipeline()
-	parcels, err := pipeline.ParseFile(context.Background(), inputPath, sourceFormat)
+	parseOpts := app.ParseOptions{LayerFilter: []string(layers)}
+	parcels, err := pipeline.ParseFile(context.Background(), inputPath, sourceFormat, parseOpts)
 	if err != nil {
 		failf("parse failed: %v\n", err)
 	}
 	if len(parcels) == 0 {
 		failf("no parcels parsed from input\n")
+	}
+
+	if *surveyFile != "" {
+		sf, err := os.Open(*surveyFile)
+		if err != nil {
+			failf("survey file open failed: %v\n", err)
+		}
+		surveyPoints, err := survey.ParseSurveyFile(sf)
+		sf.Close()
+		if err != nil {
+			failf("survey file parse failed: %v\n", err)
+		}
+		parcels = pipeline.AnnotateWithSurvey(parcels, surveyPoints, *surveyTolerance)
 	}
 
 	indices, err := selectedParcelIndices(len(parcels), *parcel, *allParcels)
@@ -125,4 +144,13 @@ func selectedParcelIndices(total, singleIndex int, all bool) ([]int, error) {
 func failf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format, args...)
 	os.Exit(1)
+}
+
+// stringSlice is a flag.Value that accumulates repeated -layer flags.
+type stringSlice []string
+
+func (s *stringSlice) String() string { return strings.Join(*s, ",") }
+func (s *stringSlice) Set(v string) error {
+	*s = append(*s, v)
+	return nil
 }

@@ -10,9 +10,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/samuel-kreimeyer/Legal/pkg/app"
-	"github.com/samuel-kreimeyer/Legal/pkg/parse"
-	renderlegal "github.com/samuel-kreimeyer/Legal/pkg/render/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/app"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/parse"
+	renderlegal "github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/render/legal"
+	"github.com/samuel-kreimeyer/Curatores-Viarum/packages/legal-description/pkg/survey"
 )
 
 type Handler struct {
@@ -36,12 +37,15 @@ func (h *Handler) Routes() http.Handler {
 }
 
 type describeRequest struct {
-	Format        string               `json:"format"`
-	Filename      string               `json:"filename"`
-	ContentBase64 string               `json:"content_base64"`
-	Parcel        int                  `json:"parcel"`
-	All           bool                 `json:"all"`
-	RenderOptions renderOptionsRequest `json:"render_options"`
+	Format              string               `json:"format"`
+	Filename            string               `json:"filename"`
+	ContentBase64       string               `json:"content_base64"`
+	LayerFilter         []string             `json:"layer_filter,omitempty"`
+	SurveyBase64        string               `json:"survey_base64,omitempty"`
+	SurveyToleranceFeet float64              `json:"survey_tolerance_feet,omitempty"`
+	Parcel              int                  `json:"parcel"`
+	All                 bool                 `json:"all"`
+	RenderOptions       renderOptionsRequest `json:"render_options"`
 }
 
 type renderOptionsRequest struct {
@@ -195,7 +199,8 @@ func (h *Handler) handleDescribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parcels, err := h.pipeline.ParseReader(context.Background(), bytes.NewReader(content), sourceFormat)
+	parseOpts := app.ParseOptions{LayerFilter: req.LayerFilter}
+	parcels, err := h.pipeline.ParseReader(context.Background(), bytes.NewReader(content), sourceFormat, parseOpts)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("parse failed: %v", err))
 		return
@@ -203,6 +208,20 @@ func (h *Handler) handleDescribe(w http.ResponseWriter, r *http.Request) {
 	if len(parcels) == 0 {
 		writeError(w, http.StatusBadRequest, "no parcels parsed from payload")
 		return
+	}
+
+	if strings.TrimSpace(req.SurveyBase64) != "" {
+		surveyContent, err := base64.StdEncoding.DecodeString(req.SurveyBase64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("survey_base64 decode failed: %v", err))
+			return
+		}
+		surveyPoints, err := survey.ParseSurveyFile(bytes.NewReader(surveyContent))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("survey file parse failed: %v", err))
+			return
+		}
+		parcels = h.pipeline.AnnotateWithSurvey(parcels, surveyPoints, req.SurveyToleranceFeet)
 	}
 
 	indices, err := selectedIndices(len(parcels), req.Parcel, req.All)
